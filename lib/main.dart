@@ -1,7 +1,9 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart'as http;
+import 'package:flutter_emoji/flutter_emoji.dart';
+import 'package:http/http.dart' as http;
+import 'package:characters/characters.dart'; // Import the characters package
+
 class Comment {
   final String text;
   final List<String> images;
@@ -111,24 +113,31 @@ class SocialCommentsWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildRichCommentText(context, comment.text, comment.images, comment.names),
+            _buildRichCommentText(
+                context, comment.text, comment.images, comment.names),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRichCommentText(BuildContext context, String text, List<String> images, List<String> names) {
+
+Widget _buildRichCommentText(BuildContext context, String text, List<String> images, List<String> boldNames) {
   List<InlineSpan> textSpans = [];
-  RegExp regExp = RegExp(r'\[attachment-\d\]|\b\w+\s*\w*\b|\S');
+  RegExp regExp = RegExp(r'\[attachment-\d\]|\b\w+\s*\w*\b|.');
 
   List<String> parts = regExp.allMatches(text).map((match) => match.group(0)!).toList();
 
   List<TextSpan> currentTextSpans = [];
+  var parser = EmojiParser();
 
   void addCurrentTextSpans() {
     textSpans.addAll(currentTextSpans);
     currentTextSpans.clear();
+  }
+
+  bool isBold(String name) {
+    return boldNames.map((e) => e.trim()).contains(name);
   }
 
   for (int i = 0; i < parts.length; i++) {
@@ -144,25 +153,20 @@ class SocialCommentsWidget extends StatelessWidget {
     } else {
       // Handle names and other text
       String name = parts[i].trim(); // Remove leading and trailing whitespaces
-      bool isBold = names.map((e) => e.trim()).contains(name);
+      bool shouldBold = isBold(name);
 
-      // Replace invalid characters or emojis with a placeholder
-      String cleanedText = name.runes
-          .where((rune) => rune < 0x10FFFF)
-          .map((rune) => String.fromCharCode(rune))
-          .where((char) => char.isNotEmpty)
-          .join();
+      String parsedText = parser.unemojify(parts[i]);
 
       currentTextSpans.add(TextSpan(
-        text: cleanedText,
+        text: parsedText,
         style: TextStyle(
-          fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          fontWeight: shouldBold ? FontWeight.bold : FontWeight.normal,
           fontSize: 16, // Adjust the font size as needed
         ),
       ));
 
-      // Add space to the right of bold text
-      if (isBold && i < parts.length - 1) {
+      // Add space to the right of bold text, except for the last part
+      if (shouldBold && i < parts.length - 1) {
         currentTextSpans.add(TextSpan(text: ' '));
       }
     }
@@ -177,6 +181,7 @@ class SocialCommentsWidget extends StatelessWidget {
     ),
   );
 }
+
 
   Widget _buildImageWidget(String imageUrl) {
     String fullImageUrl = 'https://staging.simmpli.com$imageUrl';
