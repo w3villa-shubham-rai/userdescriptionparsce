@@ -1,17 +1,23 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart'as http;
 class Comment {
   final String text;
   final List<String> images;
+  final List<String> names;
 
-  Comment({required this.text, required this.images});
+  Comment({
+    required this.text,
+    required this.images,
+    required this.names,
+  });
 
   factory Comment.fromJson(Map<String, dynamic> json) {
     return Comment(
-      text: json['text'],
-      images: List<String>.from(json['images']),
+      text: json['text'] ?? '',
+      images: List<String>.from(json['images'] ?? []),
+      names: List<String>.from(json['names'] ?? []),
     );
   }
 }
@@ -45,17 +51,11 @@ class _CommentListWidgetState extends State<CommentListWidget> {
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> jsonList = json.decode(response.body); 
-      //   [
-      //   {"text": "Hello!", "images": ["image1.jpg", "image2.jpg"]},
-      //   {"text": "Another comment", "images": ["image3.jpg"]}
-      //  ]
-      // gaving the  of data jsonList using json list you iterate tha data
-      
-       final List<Comment> fetchedComments = jsonList.map((json) {
-       return Comment.fromJson(json);
-        }).toList();
+        final List<dynamic> jsonList = json.decode(response.body);
 
+        final List<Comment> fetchedComments = jsonList.map((json) {
+          return Comment.fromJson(json);
+        }).toList();
 
         setState(() {
           comments.addAll(fetchedComments);
@@ -111,36 +111,72 @@ class SocialCommentsWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildRichCommentText(context, comment.text, comment.images),
-            
+            _buildRichCommentText(context, comment.text, comment.images, comment.names),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRichCommentText(BuildContext context, String text, List<String> images) {
-    List<InlineSpan> textSpans = [];
-    List<String> parts = text.split(RegExp(r'\[attachment-\d\]'));
+  Widget _buildRichCommentText(BuildContext context, String text, List<String> images, List<String> names) {
+  List<InlineSpan> textSpans = [];
+  RegExp regExp = RegExp(r'\[attachment-\d\]|\b\w+\s*\w*\b|\S');
 
-    for (int i = 0; i < parts.length; i++) {
-      textSpans.add(TextSpan(text: parts[i]));
-      if (i < images.length) {
-        textSpans.add(WidgetSpan(
-          child: _buildImageWidget(images[i]),
-        ));
-      }
-    }
+  List<String> parts = regExp.allMatches(text).map((match) => match.group(0)!).toList();
 
-    return RichText(
-      text: TextSpan(
-        style: DefaultTextStyle.of(context).style,
-        children: textSpans,
-      ),
-    );
+  List<TextSpan> currentTextSpans = [];
+
+  void addCurrentTextSpans() {
+    textSpans.addAll(currentTextSpans);
+    currentTextSpans.clear();
   }
 
+  for (int i = 0; i < parts.length; i++) {
+    if (parts[i].startsWith('[attachment-')) {
+      // Handle attachments
+      int imageIndex = int.parse(parts[i].replaceAll(RegExp(r'[^0-9]'), ''), radix: 10) - 1;
+      if (imageIndex >= 0 && imageIndex < images.length) {
+        addCurrentTextSpans(); // Add existing text spans before the image
+        textSpans.add(WidgetSpan(
+          child: _buildImageWidget(images[imageIndex]),
+        ));
+      }
+    } else {
+      // Handle names and other text
+      String name = parts[i].trim(); // Remove leading and trailing whitespaces
+      bool isBold = names.map((e) => e.trim()).contains(name);
 
+      // Replace invalid characters or emojis with a placeholder
+      String cleanedText = name.runes
+          .where((rune) => rune < 0x10FFFF)
+          .map((rune) => String.fromCharCode(rune))
+          .where((char) => char.isNotEmpty)
+          .join();
+
+      currentTextSpans.add(TextSpan(
+        text: cleanedText,
+        style: TextStyle(
+          fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          fontSize: 16, // Adjust the font size as needed
+        ),
+      ));
+
+      // Add space to the right of bold text
+      if (isBold && i < parts.length - 1) {
+        currentTextSpans.add(TextSpan(text: ' '));
+      }
+    }
+  }
+
+  addCurrentTextSpans(); // Add any remaining text spans
+
+  return RichText(
+    text: TextSpan(
+      style: DefaultTextStyle.of(context).style,
+      children: textSpans,
+    ),
+  );
+}
 
   Widget _buildImageWidget(String imageUrl) {
     String fullImageUrl = 'https://staging.simmpli.com$imageUrl';
@@ -149,7 +185,6 @@ class SocialCommentsWidget extends StatelessWidget {
         fullImageUrl,
       ),
       radius: 8,
-      
     );
   }
 }
