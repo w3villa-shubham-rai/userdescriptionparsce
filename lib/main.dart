@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_emoji/flutter_emoji.dart';
 import 'package:http/http.dart' as http;
-import 'package:characters/characters.dart'; // Import the characters package
+
+class CommentListWidget extends StatefulWidget {
+  @override
+  _CommentListWidgetState createState() => _CommentListWidgetState();
+}
 
 class Comment {
   final String text;
@@ -22,11 +25,6 @@ class Comment {
       names: List<String>.from(json['names'] ?? []),
     );
   }
-}
-
-class CommentListWidget extends StatefulWidget {
-  @override
-  _CommentListWidgetState createState() => _CommentListWidgetState();
 }
 
 class _CommentListWidgetState extends State<CommentListWidget> {
@@ -54,6 +52,11 @@ class _CommentListWidgetState extends State<CommentListWidget> {
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
+        //   [
+        //   {"text": "Hello!", "images": ["image1.jpg", "image2.jpg"]},
+        //   {"text": "Another comment", "images": ["image3.jpg"]}
+        //  ]
+        // gaving the  of data jsonList using json list you iterate tha data
 
         final List<Comment> fetchedComments = jsonList.map((json) {
           return Comment.fromJson(json);
@@ -121,58 +124,45 @@ class SocialCommentsWidget extends StatelessWidget {
     );
   }
 
-
-Widget _buildRichCommentText(BuildContext context, String text, List<String> images, List<String> boldNames) {
+ Widget _buildRichCommentText(BuildContext context, String text, List<String> images, List<String> names) {
   List<InlineSpan> textSpans = [];
-  RegExp regExp = RegExp(r'\[attachment-\d\]|\b\w+\s*\w*\b|.');
-
-  List<String> parts = regExp.allMatches(text).map((match) => match.group(0)!).toList();
-
-  List<TextSpan> currentTextSpans = [];
-  var parser = EmojiParser();
-
-  void addCurrentTextSpans() {
-    textSpans.addAll(currentTextSpans);
-    currentTextSpans.clear();
-  }
-
-  bool isBold(String name) {
-    return boldNames.map((e) => e.trim()).contains(name);
-  }
+  List<String> parts = text.split(RegExp(r'\[attachment-\d\]'));
+  int imageIndex = 0; // Track the index of the current image
 
   for (int i = 0; i < parts.length; i++) {
-    if (parts[i].startsWith('[attachment-')) {
-      // Handle attachments
-      int imageIndex = int.parse(parts[i].replaceAll(RegExp(r'[^0-9]'), ''), radix: 10) - 1;
-      if (imageIndex >= 0 && imageIndex < images.length) {
-        addCurrentTextSpans(); // Add existing text spans before the image
-        textSpans.add(WidgetSpan(
-          child: _buildImageWidget(images[imageIndex]),
+    String partWithoutNames = parts[i];
+    Set<String> addedNames = Set(); // Keep track of names that have been added
+
+    // Remove names from the part
+    for (String name in names) {
+      partWithoutNames = partWithoutNames.replaceAll(name, '');
+    }
+
+    // Add bold name if corresponding to the current part
+    for (String name in names) {
+      if (parts[i].contains(name) && !addedNames.contains(name)) {
+        textSpans.add(TextSpan(
+          text: name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ));
-      }
-    } else {
-      // Handle names and other text
-      String name = parts[i].trim(); // Remove leading and trailing whitespaces
-      bool shouldBold = isBold(name);
-
-      String parsedText = parser.unemojify(parts[i]);
-
-      currentTextSpans.add(TextSpan(
-        text: parsedText,
-        style: TextStyle(
-          fontWeight: shouldBold ? FontWeight.bold : FontWeight.normal,
-          fontSize: 16, // Adjust the font size as needed
-        ),
-      ));
-
-      // Add space to the right of bold text, except for the last part
-      if (shouldBold && i < parts.length - 1) {
-        currentTextSpans.add(TextSpan(text: ' '));
+        addedNames.add(name);
       }
     }
-  }
 
-  addCurrentTextSpans(); // Add any remaining text spans
+    textSpans.add(TextSpan(text: partWithoutNames));
+
+    if (i < images.length) {
+      // Add the image
+      textSpans.add(WidgetSpan(
+        child: _buildImageWidget(images[imageIndex]),
+      ));
+
+      imageIndex++;
+    }
+
+    // Print the current state of textSpans
+    print(textSpans);
+  }
 
   return RichText(
     text: TextSpan(
@@ -182,14 +172,16 @@ Widget _buildRichCommentText(BuildContext context, String text, List<String> ima
   );
 }
 
-
   Widget _buildImageWidget(String imageUrl) {
     String fullImageUrl = 'https://staging.simmpli.com$imageUrl';
-    return CircleAvatar(
-      backgroundImage: NetworkImage(
-        fullImageUrl,
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: CircleAvatar(
+        backgroundImage: NetworkImage(
+          fullImageUrl,
+        ),
+        radius: 8,
       ),
-      radius: 8,
     );
   }
 }
